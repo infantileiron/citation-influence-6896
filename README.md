@@ -70,7 +70,20 @@ backend/src包含routes/controllers/services/models/schemas/middlewares/utils/co
 
 枚举位置：backend/src/constants/enums.py(Role/RunStatus/ReviewStatus)与domain.py(方向/配额)；frontend/src/constants/enums.ts(角色/状态展示)。共享组件含PageTitle/Notice/StatusBadge及业务图谱，hooks含useSession/useResource。
 
-已知边界：模拟网络；无真实文献抓取或作者消歧。未设时间衰减/边权/自引分析。HITS近重根可能慢收敛，须结合残差和警告。Redis出队强杀无自动重投，JSON业务载荷无多人乐观锁或迁移回滚。真实测试证据只放批次test-artifacts/gb-2401。
+已知边界：模拟网络；无真实文献抓取或作者消歧。未设时间衰减/边权/自引分析。HITS近重根可能慢收敛，须结合残差和警告。JSON业务载荷无多人乐观锁或迁移回滚。真实测试证据只放批次test-artifacts/gb-2401。
+
+## 中断恢复与并发语义
+
+运行状态为 queued（排队中）、recovering（等待恢复）、running（再次计算）、completed、failed。worker 启动即扫描、运行中每15秒扫描一次中断任务：
+
+- running 任务的心跳超过120秒未更新（worker 被强杀/容器重启），自动转为 recovering 并重新入队；恢复计算仍只读取研究锁定快照，数据集后续改名或变更不影响结果。
+- 每次执行先抢 Redis 运行锁（NX + 180秒 TTL，Lua 原子释放），同一运行同一时刻只有一个执行者；重复入队按 run id 去重，已完成运行再次领取直接原样返回，最终结果只发布一份。
+- 后台心跳线程按租约周期刷新时间戳并续租；recovering/未达上限的 failed 若丢失队列消息，扫描过宽限期后补投，不会永久卡住。
+- 单次运行最多3次尝试（`MAX_RUN_ATTEMPTS`），每次尝试留痕 attempts_log；仍失败则置最终 failed 并写明次数与最后原因，不再自动入队。
+- 只有 completed 运行可提交复核；queued/recovering/running/failed 的半成品被后端与复核页同时拦截。已完成运行及其复核、归档报告在任何恢复流程中保持原样。
+- 结果页徽章区分等待恢复（recovering）、再次计算（running）与最终失败（failed），并展示当前尝试次数；失败原因直接显示在页面提示中。
+
+验证脚本 `backend/scripts/verify_recovery.py`（31项）覆盖中断恢复、并发单结果、有界重试、复核拦截与消息丢失补投；不依赖外部 Redis/PostgreSQL，使用替身与 sqlite 临时库运行。
 
 ## License
 

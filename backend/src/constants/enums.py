@@ -5,6 +5,7 @@ class Role(str, Enum):
     VIEWER = "viewer"
 class RunStatus(str, Enum):
     QUEUED = "queued"
+    RECOVERING = "recovering"
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"

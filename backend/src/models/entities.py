@@ -34,6 +34,10 @@ class InfluenceRun:
  status:str='queued'
  result:dict[str,Any]=field(default_factory=dict)
  error:str=''
+ attempts:int=0
+ last_heartbeat:str=''
+ locked_by:str=''
+ attempts_log:list[dict[str,Any]]=field(default_factory=list)
  created_at:str=''
 @dataclass
 class CitationReview:
